@@ -7,6 +7,7 @@ from PIL import Image
 import random
 
 import tensorflow as tf
+import sys
 
 # 验证码字符
 number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
@@ -179,7 +180,7 @@ def train_crack_captcha_cnn():
                 print("accuracy: %09f" % acc_)
 
                 # 如果准确率大于 50 %, 保存模型， 完成训练
-                if acc_ > 0.5:
+                if acc_ > 0.96:
                     saver.save(sess, "crack_captcha.model", global_step = step)
                     break
 
@@ -190,7 +191,7 @@ def crack_captcha(captcha_image):
     output = crack_captcha_cnn()
     saver = tf.train.Saver()
     with tf.Session() as sess:
-        saver.restore(sess, tf.train.latest_checkpoint('.'))
+        saver.restore(sess, './crack_captcha.model-2500')
 
         predict = tf.argmax(tf.reshape(output, [-1, MAX_CAPTCHA, CHAR_SET_LEN]), 2)
         text_list = sess.run(predict, feed_dict = {X: [captcha_image], keepratio:1})
@@ -198,6 +199,8 @@ def crack_captcha(captcha_image):
         return text
 
 if __name__ == '__main__':
+
+    '''
     text, image = gen_captcha_text_and_image()
 
     f = plt.figure()
@@ -208,7 +211,6 @@ if __name__ == '__main__':
 
     print("验证码图像Channel:", image.shape)
 
-    '''
     vector = text2vec(text)
     print (vector)
     t = vec2text(vector)
@@ -219,13 +221,22 @@ if __name__ == '__main__':
     train_crack_captcha_cnn();
     print("traing finished !")
     '''
+    if len(sys.argv) == 2:
+        command = 'c'
+    else:
+        command = 't'
 
-    print("Let's test the model ...")
-    # predict
-    text, image = gen_captcha_text_and_image()
-    image = convert2gray(image)
-    image = image.flatten() / 255
-    predict_text = crack_captcha(image)
+    if command == 'c':
+        print("continue training...")
+        train_crack_captcha_cnn();
 
-    print("正确: {}, 预测: {}".format(text, predict_text))
+    else:
+        print("Let's test the model ...")
+        # predict
+        text, image = gen_captcha_text_and_image()
+        image = convert2gray(image)
+        image = image.flatten() / 255
+        predict_text = crack_captcha(image)
+
+        print("正确: {}, 预测: {}".format(text, predict_text))
 
