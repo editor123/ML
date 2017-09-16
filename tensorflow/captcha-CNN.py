@@ -102,8 +102,8 @@ def get_next_batch(batch_size = 128):
 
 
 
-X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WITDH])
-Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN])
+X = tf.placeholder(tf.float32, [None, IMAGE_HEIGHT * IMAGE_WITDH], name = 'x_input')
+Y = tf.placeholder(tf.float32, [None, MAX_CAPTCHA * CHAR_SET_LEN], name = 'y_input')
 keepratio = tf.placeholder(tf.float32)
 
 # CNN 定义
@@ -112,7 +112,9 @@ def crack_captcha_cnn(w_alpha = 0.01, b_alpha = 0.1):
 
     # layer 1
     w_c1 = tf.Variable(w_alpha * tf.random_normal([3, 3, 1, 32]))
+    #tf.summary.histogram('h1/weigght', w_c1)
     b_c1 = tf.Variable(b_alpha * tf.random_normal([32]))
+    #tf.summary.histogram('h1/bias', b_c1)
     conv1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(x, w_c1, strides = [1, 1, 1, 1], padding = 'SAME'), b_c1))
     pool1 = tf.nn.max_pool(conv1, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
     dr1 = tf.nn.dropout(pool1, keepratio)
@@ -120,27 +122,35 @@ def crack_captcha_cnn(w_alpha = 0.01, b_alpha = 0.1):
 
     # layer 2
     w_c2 = tf.Variable(w_alpha * tf.random_normal([3, 3, 32, 64]))
+    #tf.summary.histogram('h2/weigght', w_c2)
     b_c2 = tf.Variable(b_alpha * tf.random_normal([64]))
+    #tf.summary.histogram('h2/bias', b_c2)
     conv2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(dr1, w_c2, strides = [1, 1, 1, 1], padding = 'SAME'), b_c2))
     pool2 = tf.nn.max_pool(conv2, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
     dr2 = tf.nn.dropout(pool2, keepratio)
 
     # layer 3
     w_c3 = tf.Variable(w_alpha * tf.random_normal([3, 3, 64, 64]))
+    #tf.summary.histogram('h3/weigght', w_c3)
     b_c3 = tf.Variable(b_alpha * tf.random_normal([64]))
+    #tf.summary.histogram('h3/bias', b_c3)
     conv3= tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(dr2, w_c3, strides = [1, 1, 1, 1], padding = 'SAME'), b_c3))
     pool3 = tf.nn.max_pool(conv3, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
     dr3 = tf.nn.dropout(pool3, keepratio)
 
     # fully connected layer
     w_d = tf.Variable(w_alpha * tf.random_normal([8 * 32 * 40, 1024]))
+    #tf.summary.histogram('fc/weigght', w_d)
     b_d = tf.Variable(b_alpha * tf.random_normal([1024]))
+    #tf.summary.histogram('fc/bias', b_d)
     dense = tf.reshape(dr3, [-1, w_d.get_shape().as_list()[0]])
     dense = tf.nn.relu(tf.add(tf.matmul(dense, w_d), b_d))
     dense = tf.nn.dropout(dense, keepratio)
 
     w_out = tf.Variable(w_alpha * tf.random_normal([1024, MAX_CAPTCHA * CHAR_SET_LEN]))
+    #tf.summary.histogram('output/weigght', w_out)
     b_out = tf.Variable(b_alpha * tf.random_normal([MAX_CAPTCHA * CHAR_SET_LEN]))
+    #tf.summary.histogram('output/bias', b_out)
     out = tf.add(tf.matmul(dense, w_out), b_out)
     return out
 
@@ -150,6 +160,7 @@ def train_crack_captcha_cnn():
     output = crack_captcha_cnn()
 
     loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits = output, labels = Y))
+    tf.summary.scalar('loss', loss)
 
     optimizer = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(loss)
 
@@ -158,33 +169,44 @@ def train_crack_captcha_cnn():
     max_idx_l = tf.argmax(tf.reshape(Y, [-1, MAX_CAPTCHA, CHAR_SET_LEN]), 2)
     correct_pred = tf.equal(max_idx_p, max_idx_l)
     acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+    tf.summary.scalar('accuracy', acc)
 
     saver = tf.train.Saver()
 
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
+    init = tf.global_variables_initializer()
+    sess = tf.Session()
+    merged = tf.summary.merge_all()
+    writer = tf.summary.FileWriter("tb", sess.graph)
 
-        step = 0
-        while True:
-            batch_x, batch_y = get_next_batch(64)
-            _, loss_ = sess.run([optimizer, loss], feed_dict = {X: batch_x, Y: batch_y, keepratio: 0.75})
+    # 开始运行
+    sess.run(init)
 
-            # 每迭代10次输出一次loss
-            if step % 10 == 0:
-                print("step: %d, loss: %03f" % (step, loss_))
+    step = 0
+    while True:
+        print("step: %d " % step)
+        batch_x, batch_y = get_next_batch(64)
+        _, result = sess.run([optimizer, merged], feed_dict = {X: batch_x, Y: batch_y, keepratio: 0.75})
 
-            # 每100 step计算一次准确率
-            if step % 100 == 0:
-                batch_x_test, batch_y_test = get_next_batch(100)
-                acc_ = sess.run(acc, feed_dict = {X: batch_x_test, Y: batch_y_test, keepratio: 1.})
+        writer.add_summary(result, step)
+        # 每迭代10次输出一次loss
+        '''
+        if step % 10 == 0:
+            print("step: %d, loss: %03f" % (step, loss_))
+        '''
+
+        # 每100 step计算一次准确率
+        if step % 1000 == 0:
+            batch_x_test, batch_y_test = get_next_batch(100)
+            acc_ = sess.run(acc, feed_dict = {X: batch_x_test, Y: batch_y_test, keepratio: 1.})
+            print("accuracy: %09f" % acc_)
+
+            # 如果准确率大于 50 %, 保存模型， 完成训练
+            if acc_ > 0.96:
                 print("accuracy: %09f" % acc_)
+                saver.save(sess, "crack_captcha.model", global_step = step)
+                break
 
-                # 如果准确率大于 50 %, 保存模型， 完成训练
-                if acc_ > 0.96:
-                    saver.save(sess, "crack_captcha.model", global_step = step)
-                    break
-
-            step += 1
+        step += 1
 
 # 用模型识别验证码
 def crack_captcha(captcha_image):
