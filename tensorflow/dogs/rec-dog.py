@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import glob
-image_dir='/home/hitmoon/DOGS-images/Images'
+image_dir='/Users/hitmoon/DOGS-images/Images'
 image_filenames = glob.glob('{dir}/{glob}'.format(dir=image_dir, glob='n02*/*.jpg'))
 #print(image_filenames[0:2])
 
@@ -94,7 +94,8 @@ def write_records_file(dataset, record_location):
 
 # 读取保存的TFRecord记录文件
 print("reading TFRecords files ...")
-filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once('.output/training-images/*.tfrecords'))
+filenames = glob.glob('./output/training-images/*.tfrecords')
+filename_queue = tf.train.string_input_producer(filenames)
 reader = tf.TFRecordReader()
 _, serialized = reader.read(filename_queue)
 
@@ -110,6 +111,7 @@ record_image = tf.decode_raw(features['image'], tf.uint8)
 image = tf.reshape(record_image, [250, 151, 1])
 label = tf.cast(features['label'], tf.string)
 print("get image and label")
+print("label = ", label)
 
 min_after_dequeue = 10
 batch_size = 3
@@ -193,19 +195,22 @@ batch * 3,
 120,
 0.95,
 staircase=True)
-
-train_op = tf.train.AdamOptimizer(learning_rate, 0.9).minimize(loss, global_step = batch)
 '''
+
 train_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(loss, global_step = batch)
-corr = tf.equal(tf.argmax(train_labels, 1), tf.argmax(final_fully_connected, 1))
+#print('train_labels shape =', train_labels.get_shape())
+#print('fully_connected shape =', final_fully_connected.get_shape())
+corr = tf.equal(tf.argmax(train_labels, 0), tf.argmax(final_fully_connected, 1))
 acc = tf.reduce_mean(tf.cast(corr, tf.float32))
 train_prediction = tf.nn.softmax(final_fully_connected)
 
 steps = 1000
 sess = tf.Session()
+coord = tf.train.Coordinator()
+threads = tf.train.start_queue_runners(sess = sess, coord = coord)
 sess.run(tf.global_variables_initializer())
 
-print("string training ...")
+print("start training ...")
 
 for step in range(steps):
     print('training ...')
@@ -213,6 +218,8 @@ for step in range(steps):
     if step % 10 == 0:
         print("step:", step, "loss:", sess.run(loss), "accuracy:", sess.run(acc))
 
+coord.request_stop()
+coord.join(threads)
 print("train done!")
-                
+sess.close()
 
