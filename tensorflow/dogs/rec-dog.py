@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import glob
-image_filenames = glob.glob('/home/hitmoon/DOGS-images/Images/n02*/*.jpg')
+image_dir='/home/hitmoon/DOGS-images/Images'
+image_filenames = glob.glob('{dir}/{glob}'.format(dir=image_dir, glob='n02*/*.jpg'))
 #print(image_filenames[0:2])
 
 from itertools import groupby
@@ -22,21 +23,21 @@ image_filename_with_breed = map(lambda filename:
 (filename.split('/')[5], filename), image_filenames)
 #print(image_filename_with_breed)
 
-
 # 依据品种对图像进行分组
-for dog_breed, breed_images in groupby(image_filename_with_breed, lambda x: x[0]):
-    # 将每个品种的20% 划入到测试集中
-    for i, breed_images in enumerate(breed_images):
-        if i % 5 == 0:
-            testing_dataset[dog_breed].append(breed_images[1])
-        else:
-            training_dataset[dog_breed].append(breed_images[1])
+def group_image():
+    for dog_breed, breed_images in groupby(image_filename_with_breed, lambda x: x[0]):
+        # 将每个品种的20% 划入到测试集中
+        for i, breed_images in enumerate(breed_images):
+            if i % 5 == 0:
+                testing_dataset[dog_breed].append(breed_images[1])
+            else:
+                training_dataset[dog_breed].append(breed_images[1])
 
 
-    # 检查每个品种的测试集图像是否至少有全部图像的18%
-    breed_training_count = len(training_dataset[dog_breed])
-    breed_testing_count = len(testing_dataset[dog_breed])
-    assert round(breed_testing_count / (breed_training_count + breed_testing_count), 2) > 0.18, "Not enough testing images."
+        # 检查每个品种的测试集图像是否至少有全部图像的18%
+        breed_training_count = len(training_dataset[dog_breed])
+        breed_testing_count = len(testing_dataset[dog_breed])
+        assert round(breed_testing_count / (breed_training_count + breed_testing_count), 2) > 0.18, "Not enough testing images."
 
 
 #print(testing_dataset['n02085620-Chihuahua'])
@@ -91,7 +92,8 @@ def write_records_file(dataset, record_location):
 #write_records_file(training_dataset, './output/training-images/training-image')
 #sys.exit(1)
 
-
+# 读取保存的TFRecord记录文件
+print("reading TFRecords files ...")
 filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once('.output/training-images/*.tfrecords'))
 reader = tf.TFRecordReader()
 _, serialized = reader.read(filename_queue)
@@ -107,16 +109,21 @@ record_image = tf.decode_raw(features['image'], tf.uint8)
 # 修改图像有助于训练和输出的可视化
 image = tf.reshape(record_image, [250, 151, 1])
 label = tf.cast(features['label'], tf.string)
+print("get image and label")
+
 min_after_dequeue = 10
 batch_size = 3
 capacity = min_after_dequeue + 3 * batch_size
 
 # 获取一个batch
+print("get a batch")
 image_batch, label_batch = tf.train.shuffle_batch([image, label], batch_size = batch_size,
 capacity = capacity, min_after_dequeue = min_after_dequeue)
 
 # 将图像转换为灰度值位于[0,1)的浮点数，与convolution2d 期望的输入匹配
 float_image_batch = tf.image.convert_image_dtype(image_batch, tf.float32)
+
+print("string define the graph...")
 
 # 卷积层1
 conv2d_layer_1 = convolution2d(
@@ -161,12 +168,51 @@ activation_fn = tf.nn.relu
 hidden_layer_3 = tf.nn.dropout(hidden_layer_3, 0.1)
 
 # 输出是前面的层与训练中可用的120个不同狗品种的全连接
-final_fully_connected = tf.contrib.layers.fully_connected(
+final_fully_connected = fully_connected(
 hidden_layer_3,
 120, # 120 种狗
 weights_initializer = lambda i, dtype, partition_info: tf.truncated_normal([512, 120], stddev = 0.1)
 )
 
+print("graph is ready")
 
+# 找出所有狗的品种
+labels = list(map(lambda c: c.split('/')[-1], glob.glob('{dir}/*'.format(dir=image_dir))))
+# 匹配每个来自label_batch的标签并返回他们在类别列表中的索引
+train_labels = tf.map_fn(lambda l: tf.where(tf.equal(labels, l))[0, 0:1][0], label_batch, dtype=tf.int64)
+
+# 定义损失函数
+loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+labels=train_labels, logits = final_fully_connected))
+
+batch = tf.Variable(0)
+'''
+learning_rate = tf.train.exponential_decay(
+0.01,
+batch * 3,
+120,
+0.95,
+staircase=True)
+
+train_op = tf.train.AdamOptimizer(learning_rate, 0.9).minimize(loss, global_step = batch)
+'''
+train_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(loss, global_step = batch)
+corr = tf.equal(tf.argmax(train_labels, 1), tf.argmax(final_fully_connected, 1))
+acc = tf.reduce_mean(tf.cast(corr, tf.float32))
+train_prediction = tf.nn.softmax(final_fully_connected)
+
+steps = 1000
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+
+print("string training ...")
+
+for step in range(steps):
+    print('training ...')
+    sess.run(train_op)
+    if step % 10 == 0:
+        print("step:", step, "loss:", sess.run(loss), "accuracy:", sess.run(acc))
+
+print("train done!")
                 
 
