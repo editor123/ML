@@ -9,6 +9,7 @@ from itertools import groupby
 from collections import defaultdict
 from PIL import Image
 import matplotlib.pyplot as plt
+from tensorflow.contrib.layers.python.layers import fully_connected, convolution2d
 
 import tensorflow as tf
 import sys
@@ -118,13 +119,13 @@ capacity = capacity, min_after_dequeue = min_after_dequeue)
 float_image_batch = tf.image.convert_image_dtype(image_batch, tf.float32)
 
 # 卷积层1
-conv2d_layer_1 = tf.contrib.layers.convolution2d(
+conv2d_layer_1 = convolution2d(
 float_image_batch,
 num_outputs = 32, # filter 个数
 kernel_size = (5,5),      # filter 的宽和高
 activation_fn = tf.nn.relu,
-weights_initializer = tf.random_normal,
-stride = (2, 2),
+weights_initializer = tf.random_normal_initializer,
+stride = [2, 2],
 trainable = True)
 
 pool_layer_1 = tf.nn.max_pool(conv2d_layer_1, ksize = [1, 2, 2, 1],
@@ -133,11 +134,12 @@ pool_layer_1 = tf.nn.max_pool(conv2d_layer_1, ksize = [1, 2, 2, 1],
 
 # 卷积层2
 
-conv2d_layer_2 = tf.contrib.layers.convolution2d(
+conv2d_layer_2 = convolution2d(
 pool_layer_1,
 num_outputs = 64,
 kernel_size = (5, 5),
 activation_fn = tf.nn.relu,
+weights_initializer = tf.random_normal_initializer,
 stride = (1, 1),
 trainable = True)
 
@@ -148,10 +150,10 @@ pool_layer_2 = tf.nn.max_pool(conv2d_layer_2, ksize = [1, 2, 2, 1],
 flattened_layer_2 = tf.reshape(pool_layer_2, [ batch_size, -1 ])
 
 # weight_init 参数也可以接收一个可调用参数，这里使用的了一个lambda 表达式返回了一个截断的正态分布，并指定了标准差
-hidden_layer_3 = tf.contrib.layers.fully_connected(
+hidden_layer_3 = fully_connected(
 flattened_layer_2,
 512,
-weights_initializer = lambda i, dtype: tf.truncated_normal([38912, 512], stddev = 0.1),
+weights_initializer = lambda i, dtype, partition_info: tf.truncated_normal([38912, 512], stddev = 0.1),
 activation_fn = tf.nn.relu
 )
 
@@ -162,7 +164,7 @@ hidden_layer_3 = tf.nn.dropout(hidden_layer_3, 0.1)
 final_fully_connected = tf.contrib.layers.fully_connected(
 hidden_layer_3,
 120, # 120 种狗
-weights_initializer = lambda i, dtype: tf.truncated_normal([512, 120], stddev = 0.1)
+weights_initializer = lambda i, dtype, partition_info: tf.truncated_normal([512, 120], stddev = 0.1)
 )
 
 
