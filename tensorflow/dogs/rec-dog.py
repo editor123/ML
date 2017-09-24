@@ -86,9 +86,9 @@ def write_records_file(dataset, record_location):
 
 
 
-write_records_file(testing_dataset, './output/testing-images/testing-image')
-write_records_file(training_dataset, './output/training-images/training-image')
-sys.exit(1)
+#write_records_file(testing_dataset, './output/testing-images/testing-image')
+#write_records_file(training_dataset, './output/training-images/training-image')
+#sys.exit(1)
 
 
 filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once('.output/training-images/*.tfrecords'))
@@ -96,7 +96,7 @@ reader = tf.TFRecordReader()
 _, serialized = reader.read(filename_queue)
 
 features = tf.parse_single_example(
-seriaalized,
+serialized,
 features={
     'label': tf.FixedLenFeature([], tf.string),
     'image': tf.FixedLenFeature([], tf.string),
@@ -120,10 +120,10 @@ float_image_batch = tf.image.convert_image_dtype(image_batch, tf.float32)
 # 卷积层1
 conv2d_layer_1 = tf.contrib.layers.convolution2d(
 float_image_batch,
-num_output_channels = 32, # filter 个数
+num_outputs = 32, # filter 个数
 kernel_size = (5,5),      # filter 的宽和高
 activation_fn = tf.nn.relu,
-weight_init = tf.random_normal,
+weights_initializer = tf.random_normal,
 stride = (2, 2),
 trainable = True)
 
@@ -135,7 +135,7 @@ pool_layer_1 = tf.nn.max_pool(conv2d_layer_1, ksize = [1, 2, 2, 1],
 
 conv2d_layer_2 = tf.contrib.layers.convolution2d(
 pool_layer_1,
-num_output_channels = 64,
+num_outputs = 64,
 kernel_size = (5, 5),
 activation_fn = tf.nn.relu,
 stride = (1, 1),
@@ -151,7 +151,7 @@ flattened_layer_2 = tf.reshape(pool_layer_2, [ batch_size, -1 ])
 hidden_layer_3 = tf.contrib.layers.fully_connected(
 flattened_layer_2,
 512,
-weight_init = lambda i, dtype: tf.truncated_normal([38912, 512], stddev = 0.1),
+weights_initializer = lambda i, dtype: tf.truncated_normal([38912, 512], stddev = 0.1),
 activation_fn = tf.nn.relu
 )
 
@@ -162,7 +162,7 @@ hidden_layer_3 = tf.nn.dropout(hidden_layer_3, 0.1)
 final_fully_connected = tf.contrib.layers.fully_connected(
 hidden_layer_3,
 120, # 120 种狗
-weight_init = lambda i, dtype: tf.truncated_normal([512, 120], stddev = 0.1)
+weights_initializer = lambda i, dtype: tf.truncated_normal([512, 120], stddev = 0.1)
 )
 
 
