@@ -7,6 +7,8 @@ image_filenames = glob.glob('/home/hitmoon/DOGS-images/Images/n02*/*.jpg')
 
 from itertools import groupby
 from collections import defaultdict
+from PIL import Image
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 import sys
@@ -19,7 +21,6 @@ image_filename_with_breed = map(lambda filename:
 (filename.split('/')[5], filename), image_filenames)
 #print(image_filename_with_breed)
 
-sess = tf.Session()
 
 # 依据品种对图像进行分组
 for dog_breed, breed_images in groupby(image_filename_with_breed, lambda x: x[0]):
@@ -39,6 +40,7 @@ for dog_breed, breed_images in groupby(image_filename_with_breed, lambda x: x[0]
 
 #print(testing_dataset['n02085620-Chihuahua'])
 
+
 def write_records_file(dataset, record_location):
     '''
     用dataset中的图像填充一个TFRecord文件，并将类别包含进来
@@ -51,37 +53,25 @@ def write_records_file(dataset, record_location):
         存储TFRecord的输出路径
     '''
 
+    current_index = 0
     writer = None
     # 枚举dataset, 因为当前索引用于对文件的划分，每隔100幅图像，训练样本的信息就被写入一个新的TFRecord文件中，以加快操作进程
-    current_index = 0
     for breed, images_filenames in dataset.items():
         for image_filename in images_filenames:
             if current_index % 100 == 0:
                 if writer:
                     writer.close()
-                    del writer
-                    writer = None
-
-                record_filename = '{record_location}.{current_index}.tfrecords'.format(record_location = record_location, current_index = current_index)
-
+                record_filename = '{record_location}.{index}.tfrecords'.format(record_location = record_location, index= current_index)
                 print("record_filename = ", record_filename)
                 writer = tf.python_io.TFRecordWriter(record_filename)
 
-            current_index += 1
-            image_file = tf.read_file(image_filename)
-            # 利用try catch 将TensorFlow 无法识别的jpeg 图像忽略
-            try:
-                image = tf.image.decode_jpeg(image_file)
-            except:
-                print("Can not decode file:", image_filename)
-                continue
+            # 利用PIL 打开文件
+            image = Image.open(image_filename)
 
             # 转换为灰度图会减少计算量和内存占用，但这并不是必须的
-            grayscale_image = tf.image.rgb_to_grayscale(image)
-            resized_image = tf.image.resize_images(grayscale_image, [250, 151])
-            # 虽然更改尺寸后的图像的数据类型是浮点型，但是RGB值不在[0, 255] 区间内
-            image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
+            image = image.convert('L')
 
+            image_bytes = image.resize((250,151)).tobytes()
             # 将标签按照字符串存储比较高效
             image_label = breed.encode('utf-8')
 
@@ -89,10 +79,14 @@ def write_records_file(dataset, record_location):
                     'label':tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_label])),
                     'image':tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_bytes]))}))
             writer.write(example.SerializeToString())
-    writer.close()
+
+            current_index += 1
+    if writer:
+        writer.close()
 
 
-#write_records_file(testing_dataset, './output/testing-images/testing-image')
+
+write_records_file(testing_dataset, './output/testing-images/testing-image')
 write_records_file(training_dataset, './output/training-images/training-image')
 sys.exit(1)
 
@@ -151,11 +145,7 @@ pool_layer_2 = tf.nn.max_pool(conv2d_layer_2, ksize = [1, 2, 2, 1],
                 strides = [1, 2, 2, 1],
                 padding = 'SAME')
 
-flattened_layer_2 = tf.reshape(
-pool_layer_2,
-[ batch_size,
-  -1
-])
+flattened_layer_2 = tf.reshape(pool_layer_2, [ batch_size, -1 ])
 
 # weight_init 参数也可以接收一个可调用参数，这里使用的了一个lambda 表达式返回了一个截断的正态分布，并指定了标准差
 hidden_layer_3 = tf.contrib.layers.fully_connected(
