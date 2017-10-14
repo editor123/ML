@@ -11,7 +11,7 @@ from tensorflow.contrib.layers.python.layers import fully_connected, convolution
 import tensorflow as tf
 import sys
 
-image_dir='/Users/hitmoon/DOGS-images/Images'
+image_dir='/home/hitmoon/DOGS-images/Images'
 image_filenames = glob.glob('{dir}/{glob}'.format(dir=image_dir, glob='n02*/*.jpg'))
 #print(image_filenames[0:2])
 
@@ -209,7 +209,7 @@ def train_rec_dog():
     corr = tf.equal(train_labels, predict)
     acc = tf.reduce_mean(tf.cast(corr, tf.float32))
 
-    steps = 1000
+    steps = 100000
 
     print("start training ...")
 
@@ -223,7 +223,8 @@ def train_rec_dog():
             #print('training ...')
             sess.run(train_op)
             if step % 10 == 0:
-                print("step:", step, "loss:", sess.run(loss), "label", sess.run(train_labels), "predict", sess.run(predict), "accuracy:", sess.run(acc))
+                _acc, _loss = sess.run([acc, loss])
+                print("step: %d, loss: %09f, accuracy: %09f" % (step, _loss, _acc))
 
         coord.request_stop()
         coord.join(threads)
