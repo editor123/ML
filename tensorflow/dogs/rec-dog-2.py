@@ -147,7 +147,7 @@ def conv2d(x, W):
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
-def define_graph(input_image, batch_size):
+def rec_cnn(input_image):
     print("string define the graph...")
 
     # 卷积层1
@@ -188,14 +188,14 @@ def train_rec_dog():
 
     # encode_to_tf_records()
 
-    image_batch, label_batch = get_batch(3)
+    image_batch, label_batch = get_batch(10)
 
     # 找出所有狗的品种
     labels = list(map(lambda c: c.split('/')[-1], glob.glob('{dir}/*'.format(dir=image_dir))))
     # 匹配每个来自label_batch的标签并返回他们在类别列表中的索引
     train_labels = tf.map_fn(lambda l: tf.where(tf.equal(labels, l))[0, 0:1][0], label_batch, dtype=tf.int64)
 
-    out = define_graph(image_batch, 3)
+    out = rec_cnn(image_batch)
 
     # 定义损失函数
     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
