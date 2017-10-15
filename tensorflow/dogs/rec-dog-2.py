@@ -15,6 +15,9 @@ image_dir='/home/hitmoon/DOGS-images/Images'
 image_filenames = glob.glob('{dir}/{glob}'.format(dir=image_dir, glob='n02*/*.jpg'))
 #print(image_filenames[0:2])
 
+train_glob = './output/training-images/*.tfrecords'
+test_glob = './output/testing-images/*.tfrecords'
+
 # 依据品种对图像进行分组
 def group_image(filenames):
 
@@ -96,10 +99,10 @@ def encode_to_tf_records():
     write_records_file(training_dataset, './output/training-images/training-image')
 
 
-def decode_tf_records():
+def decode_tf_records(glob_pat):
     # 读取保存的TFRecord记录文件
     print("reading TFRecords files ...")
-    filenames = glob.glob('./output/training-images/*.tfrecords')
+    filenames = glob.glob(glob_pat)
     filename_queue = tf.train.string_input_producer(filenames)
     reader = tf.TFRecordReader()
     _, serialized = reader.read(filename_queue)
@@ -119,9 +122,9 @@ def decode_tf_records():
     print("label = ", label)
     return image,label
 
-def get_batch(batch_size):
+def get_batch(batch_size, glob_pat):
 
-    image, label = decode_tf_records()
+    image, label = decode_tf_records(glob_pat)
 
     # 获取一个batch
     print("get a batch")
@@ -173,7 +176,7 @@ def rec_cnn(input_image):
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
     # 对一些神经元进行dropout，削减他们在模型中的重要性
-    h_fc1_drop = tf.nn.dropout(h_fc1, 1.0)
+    h_fc1_drop = tf.nn.dropout(h_fc1, 0.7)
 
     # 输出是前面的层与训练中可用的120个不同狗品种的全连接
     W_fc2 = weight_variable([1024, 120])
@@ -188,7 +191,8 @@ def train_rec_dog():
 
     # encode_to_tf_records()
 
-    image_batch, label_batch = get_batch(10)
+    # 训练数据
+    image_batch, label_batch = get_batch(10, train_glob)
 
     # 找出所有狗的品种
     labels = list(map(lambda c: c.split('/')[-1], glob.glob('{dir}/*'.format(dir=image_dir))))
@@ -209,6 +213,15 @@ def train_rec_dog():
     corr = tf.equal(train_labels, predict)
     acc = tf.reduce_mean(tf.cast(corr, tf.float32))
 
+    # 测试数据
+    test_image_batch, test_label_batch = get_batch(10, test_glob)
+    test_labels = tf.map_fn(lambda l: tf.where(tf.equal(labels, l))[0, 0:1][0], test_label_batch, dtype=tf.int64)
+    test_out = rec_cnn(test_image_batch)
+
+    test_predict = tf.argmax(test_out, 1)
+    test_corr = tf.equal(test_labels, test_predict)
+    test_acc = tf.reduce_mean(tf.cast(test_corr, tf.float32))
+
     steps = 100000
 
     print("start training ...")
@@ -223,8 +236,8 @@ def train_rec_dog():
             #print('training ...')
             sess.run(train_op)
             if step % 10 == 0:
-                _acc, _loss = sess.run([acc, loss])
-                print("step: %d, loss: %09f, accuracy: %09f" % (step, _loss, _acc))
+                _acc, _test_acc, _loss = sess.run([acc, test_acc, loss])
+                print("step: %d, loss: %9f, train accuracy: %9f, test accuracy: %9f" % (step, _loss, _acc, _test_acc))
 
         coord.request_stop()
         coord.join(threads)
