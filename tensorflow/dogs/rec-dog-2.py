@@ -144,8 +144,8 @@ def bias_variable(shape):
     value = tf.constant(0.1, shape=shape)
     return tf.Variable(value)
 
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
+def conv2d(x, W, strides):
+    return tf.nn.conv2d(x, W, strides=strides, padding='SAME')
 
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
@@ -157,29 +157,28 @@ def rec_cnn(input_image):
     W_c1 = weight_variable([5, 5, 1, 32])
     b_c1 = bias_variable([32])
 
-    h_c1 = tf.nn.relu(conv2d(input_image, W_c1) + b_c1)
+    h_c1 = tf.nn.relu(conv2d(input_image, W_c1, [1, 2, 2, 1]) + b_c1)
     h_pool1 = max_pool_2x2(h_c1)
 
     # 卷积层2
     W_c2 = weight_variable([5, 5, 32, 64])
     b_c2 = bias_variable([64])
 
-    h_c2 = tf.nn.relu(conv2d(h_pool1, W_c2) + b_c2)
+    h_c2 = tf.nn.relu(conv2d(h_pool1, W_c2, [1, 1, 1, 1]) + b_c2)
     h_pool2 = max_pool_2x2(h_c2)
 
-
     # densely layer
-    W_fc1 = weight_variable([63 * 38 * 64, 1024])
-    b_fc1 = bias_variable([1024])
+    W_fc1 = weight_variable([32 * 19 * 64, 512])
+    b_fc1 = bias_variable([512])
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 63 * 38 * 64])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 32 * 19 * 64])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
     # 对一些神经元进行dropout，削减他们在模型中的重要性
-    h_fc1_drop = tf.nn.dropout(h_fc1, 0.7)
+    h_fc1_drop = tf.nn.dropout(h_fc1, 0.1)
 
     # 输出是前面的层与训练中可用的120个不同狗品种的全连接
-    W_fc2 = weight_variable([1024, 120])
+    W_fc2 = weight_variable([512, 120])
     b_fc2 = bias_variable([120])
     
     final = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
